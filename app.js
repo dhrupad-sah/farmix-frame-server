@@ -231,6 +231,19 @@ app.post("/calculateSimilarity", async (req, res) => {
     }
   });
 
+app.post("/getSimilarityScore", async (req,res)=>
+{
+    try {
+        const { fid } = req.body;
+    
+        const similarityScore = similarityScores[fid] !== undefined ? similarityScores[fid] : null;
+        return res.status(200).json(similarityScore);
+        
+      } catch (err) {
+        console.log(err);
+      }
+})
+
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
   });
