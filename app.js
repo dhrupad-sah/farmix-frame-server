@@ -6,15 +6,15 @@ const cors = require("cors");
 config();
 
 app.use(
-    cors({
-        origin: [
-            "http://localhost:3000",
-            "https://farmix-web3bytes.vercel.app",
-            "https://main.d1mk2y9g4ss2pn.amplifyapp.com"
-        ],
-        methods: ["POST", "GET", "HEAD", "PUT", "DELETE", "PATCH"],
-        credentials: true,
-    })
+  cors({
+    origin: [
+      "http://localhost:3000",
+      "https://farmix-web3bytes.vercel.app",
+      "https://main.d1mk2y9g4ss2pn.amplifyapp.com",
+    ],
+    methods: ["POST", "GET", "HEAD", "PUT", "DELETE", "PATCH"],
+    credentials: true,
+  })
 );
 
 app.use(express.json());
@@ -45,7 +45,11 @@ const getUserAddressFromFID = async (fid) => {
   });
 
   const { data } = await response.json();
-  if (data.Socials && data.Socials.Social.length > 0 && data.Socials.Social[0].connectedAddresses.length > 0) {
+  if (
+    data.Socials &&
+    data.Socials.Social.length > 0 &&
+    data.Socials.Social[0].connectedAddresses.length > 0
+  ) {
     return data.Socials.Social[0].connectedAddresses[0].address;
   }
   return null;
@@ -75,12 +79,15 @@ const getUserAddressFromFCUsername = async (username) => {
   });
 
   const { data } = await response.json();
-  if (data.Socials && data.Socials.Social.length > 0 && data.Socials.Social[0].connectedAddresses.length > 0) {
+  if (
+    data.Socials &&
+    data.Socials.Social.length > 0 &&
+    data.Socials.Social[0].connectedAddresses.length > 0
+  ) {
     return data.Socials.Social[0].connectedAddresses[0].address;
   }
   return null;
 };
-
 
 const getUserFollowingsForAddress = async (address) => {
   const query = `query {
@@ -110,12 +117,19 @@ const getUserFollowingsForAddress = async (address) => {
 };
 
 const getAllNFTsForAddress = async (address, client) => {
-  const resp = await client.NftService.getNftsForAddress("base-mainnet", address, { withUncached: true });
+  const resp = await client.NftService.getNftsForAddress(
+    "base-mainnet",
+    address,
+    { withUncached: true }
+  );
   return resp.data?.items || [];
 };
 
 const getAllTokensForAddress = async (address, client) => {
-  const resp = await client.BalanceService.getTokenBalancesForWalletAddress("base-mainnet", address);
+  const resp = await client.BalanceService.getTokenBalancesForWalletAddress(
+    "base-mainnet",
+    address
+  );
   return resp.data?.items || [];
 };
 
@@ -126,80 +140,111 @@ const calculateArraySimilarity = (array1, array2) => {
   const intersection = new Set([...set1].filter((x) => set2.has(x)));
   const intersectionArray = Array.from(intersection);
   return {
-    similarity: (intersectionArray.length / Math.max(set1.size, set2.size)) * 100,
+    similarity:
+      (intersectionArray.length / Math.max(set1.size, set2.size)) * 100,
     common: intersectionArray,
   };
 };
 
-  const calculateSimilarity = async (fid, secondaryUsername)=> {
+const calculateSimilarity = async (fid, secondaryUsername) => {
   if (similarityScores[fid] !== undefined) {
     similarityScores[fid] = null;
     console.log(`Similarity score set to null for fid: ${fid}`);
   }
 
   const primaryAddressPromise = getUserAddressFromFID(fid);
-  const secondaryAddressPromise = getUserAddressFromFCUsername(secondaryUsername);
+  const secondaryAddressPromise =
+    getUserAddressFromFCUsername(secondaryUsername);
 
-
-  const [primaryAddress, secondaryAddress] = await Promise.all([primaryAddressPromise, secondaryAddressPromise]);
+  const [primaryAddress, secondaryAddress] = await Promise.all([
+    primaryAddressPromise,
+    secondaryAddressPromise,
+  ]);
 
   console.log(primaryAddress, secondaryAddress);
-
 
   if (!primaryAddress || !secondaryAddress) {
     console.error("One or both usernames did not resolve to addresses.");
     return 0;
   }
 
-//   const client = new CovalentClient(`${process.env.COVALENT_API_KEY}`);
-
   const primaryDataPromises = [
     getAllNFTsForAddress(primaryAddress, client),
     getAllTokensForAddress(primaryAddress, client),
-    getUserFollowingsForAddress(primaryAddress)
+    getUserFollowingsForAddress(primaryAddress),
   ];
 
   const secondaryDataPromises = [
     getAllNFTsForAddress(secondaryAddress, client),
     getAllTokensForAddress(secondaryAddress, client),
-    getUserFollowingsForAddress(secondaryAddress)
+    getUserFollowingsForAddress(secondaryAddress),
   ];
 
   const [
     [primaryNftData, primaryTokenData, primaryFollowingData],
-    [secondaryNftData, secondaryTokenData, secondaryFollowingData]
-  ] = await Promise.all([Promise.all(primaryDataPromises), Promise.all(secondaryDataPromises)]);
+    [secondaryNftData, secondaryTokenData, secondaryFollowingData],
+  ] = await Promise.all([
+    Promise.all(primaryDataPromises),
+    Promise.all(secondaryDataPromises),
+  ]);
 
-  const primaryNfts = (primaryNftData).map(item => item.nft_data?.[0]?.external_data?.image).filter(image => image);
-  const secondaryNfts = (secondaryNftData).map(item => item.nft_data?.[0]?.external_data?.image).filter(image => image);
+  const primaryNfts = primaryNftData
+    .map((item) => item.nft_data?.[0]?.external_data?.image)
+    .filter((image) => image);
+  const secondaryNfts = secondaryNftData
+    .map((item) => item.nft_data?.[0]?.external_data?.image)
+    .filter((image) => image);
 
-  const primaryTokens = (primaryTokenData).map(item => item.contract_ticker_symbol);
-  const secondaryTokens = (secondaryTokenData).map(item => item.contract_ticker_symbol);
+  const primaryTokens = primaryTokenData.map(
+    (item) => item.contract_ticker_symbol
+  );
+  const secondaryTokens = secondaryTokenData.map(
+    (item) => item.contract_ticker_symbol
+  );
 
-  const primaryFollowings = primaryFollowingData.map(following => {
-    if ('followingAddress' in following && following.followingAddress) {
-      return following.followingAddress.socials[0]?.profileName;
-    }
-    return null;
-  }).filter(name => name);
-  const secondaryFollowings = secondaryFollowingData.map(following => {
-    if ('followingAddress' in following && following.followingAddress) {
-      return following.followingAddress.socials[0]?.profileName;
-    }
-    return null;
-  }).filter(name => name);
+  const primaryFollowings = primaryFollowingData
+    .map((following) => {
+      if ("followingAddress" in following && following.followingAddress) {
+        return following.followingAddress.socials[0]?.profileName;
+      }
+      return null;
+    })
+    .filter((name) => name);
+  const secondaryFollowings = secondaryFollowingData
+    .map((following) => {
+      if ("followingAddress" in following && following.followingAddress) {
+        return following.followingAddress.socials[0]?.profileName;
+      }
+      return null;
+    })
+    .filter((name) => name);
 
-  const nftSimilarityResult = calculateArraySimilarity(primaryNfts, secondaryNfts);
+  const nftSimilarityResult = calculateArraySimilarity(
+    primaryNfts,
+    secondaryNfts
+  );
   console.log(`NFT similarity: ${nftSimilarityResult.similarity}`);
 
-  const tokenSimilarityResult = calculateArraySimilarity(primaryTokens, secondaryTokens);
+  const tokenSimilarityResult = calculateArraySimilarity(
+    primaryTokens,
+    secondaryTokens
+  );
   console.log(`Token similarity: ${tokenSimilarityResult.similarity}`);
 
-  const followingSimilarityResult = calculateArraySimilarity(primaryFollowings, secondaryFollowings);
+  const followingSimilarityResult = calculateArraySimilarity(
+    primaryFollowings,
+    secondaryFollowings
+  );
   console.log(`Following similarity: ${followingSimilarityResult.similarity}`);
 
-  const validSimilarities = [nftSimilarityResult.similarity, tokenSimilarityResult.similarity, followingSimilarityResult.similarity].filter(similarity => similarity > 0);
-  const similarityScore = validSimilarities.length ? validSimilarities.reduce((a, b) => a + b) / validSimilarities.length : 0;
+  const similarities = [
+    nftSimilarityResult.similarity,
+    tokenSimilarityResult.similarity,
+    followingSimilarityResult.similarity,
+  ];
+
+  const similarityScore =
+    similarities.reduce((a, b) => a + b, 0) / similarities.length;
 
   console.log(`Similarity score: ${similarityScore}`);
 
@@ -208,42 +253,37 @@ const calculateArraySimilarity = (array1, array2) => {
   return similarityScore;
 };
 
- const getSimilarityScore = async (fid) => {
+const getSimilarityScore = async (fid) => {
   return similarityScores[fid] !== undefined ? similarityScores[fid] : null;
 };
 
 app.post("/calculateSimilarity", async (req, res) => {
-    try {
-      const { fid, secondaryUsername } = req.body;
-  
-      console.log(fid, secondaryUsername);
-  
-      const response = await calculateSimilarity(
-        fid,
-        secondaryUsername
-      );
-  
-      console.log(response);
-      return res.status(200).json(response);
-      
-    } catch (err) {
-      console.log(err);
-    }
-  });
+  try {
+    const { fid, secondaryUsername } = req.body;
 
-app.post("/getSimilarityScore", async (req,res)=>
-{
-    try {
-        const { fid } = req.body;
-    
-        const similarityScore = similarityScores[fid] !== undefined ? similarityScores[fid] : null;
-        return res.status(200).json(similarityScore);
-        
-      } catch (err) {
-        console.log(err);
-      }
-})
+    console.log(fid, secondaryUsername);
+
+    const response = await calculateSimilarity(fid, secondaryUsername);
+
+    console.log(response);
+    return res.status(200).json(response);
+  } catch (err) {
+    console.log(err);
+  }
+});
+
+app.post("/getSimilarityScore", async (req, res) => {
+  try {
+    const { fid } = req.body;
+
+    const similarityScore =
+      similarityScores[fid] !== undefined ? similarityScores[fid] : null;
+    return res.status(200).json(similarityScore);
+  } catch (err) {
+    console.log(err);
+  }
+});
 
 app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-  });
+  console.log(`Server is running on port ${PORT}`);
+});
