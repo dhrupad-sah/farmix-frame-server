@@ -55,6 +55,23 @@ const getUserAddressFromFID = async (fid) => {
   return null;
 };
 
+// Calculate similarity between two arrays of objects as a percentage and collect common elements.
+const calculateObjectArraySimilarity = (array1, array2, key) => {
+    if (!array1.length || !array2.length) return { similarity: 0, common: [] }; // Return 0 if either array is empty
+
+    const map1 = new Map(array1.map((item) => [item[key], item]));
+    const map2 = new Map(array2.map((item) => [item[key], item]));
+
+    const commonKeys = [...map1.keys()].filter((key) => map2.has(key));
+    const common = commonKeys.map((key) => map1.get(key));
+
+    return {
+        similarity:
+            (commonKeys.length / Math.max(array1.length, array2.length)) * 100,
+        common: common,
+    };
+};
+
 const getUserAddressFromFCUsername = async (username) => {
   const query = `query {
     Socials(input: { filter: { dappName: { _eq: farcaster }, profileName: { _eq: "${username}" } }, blockchain: ethereum }) {
@@ -88,6 +105,35 @@ const getUserAddressFromFCUsername = async (username) => {
   }
   return null;
 };
+
+const getChannelFollowingsForAddress = async (address) => {
+    const query = `query MyQuery {
+        FarcasterChannelParticipants(
+        input: {filter: {channelActions: {_eq: follow}, participant: {_in: ["${address}"]}}, blockchain: ALL}
+        ) 
+            {
+                FarcasterChannelParticipant {
+                channelId
+                channelName
+                channel {
+                    imageUrl
+                }
+            }
+        }
+    }`;
+
+    const response = await fetch("https://api.airstack.xyz/gql", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: process.env.AIRSTACK_API_KEY,
+        },
+        body: JSON.stringify({ query }),
+    });
+
+    const { data } = await response.json();
+    return data.FarcasterChannelParticipants.FarcasterChannelParticipant || [];
+}
 
 const getUserFollowingsForAddress = async (address) => {
   const query = `query {
@@ -172,17 +218,19 @@ const calculateSimilarity = async (fid, secondaryUsername) => {
     getAllNFTsForAddress(primaryAddress, client),
     getAllTokensForAddress(primaryAddress, client),
     getUserFollowingsForAddress(primaryAddress),
+    getChannelFollowingsForAddress(primaryAddress)
   ];
 
   const secondaryDataPromises = [
     getAllNFTsForAddress(secondaryAddress, client),
     getAllTokensForAddress(secondaryAddress, client),
     getUserFollowingsForAddress(secondaryAddress),
+    getChannelFollowingsForAddress(secondaryAddress)
   ];
 
   const [
-    [primaryNftData, primaryTokenData, primaryFollowingData],
-    [secondaryNftData, secondaryTokenData, secondaryFollowingData],
+    [primaryNftData, primaryTokenData, primaryFollowingData, primaryChannelFollowingDat],
+    [secondaryNftData, secondaryTokenData, secondaryFollowingDat, secondaryChannelFollowingData],
   ] = await Promise.all([
     Promise.all(primaryDataPromises),
     Promise.all(secondaryDataPromises),
@@ -237,10 +285,17 @@ const calculateSimilarity = async (fid, secondaryUsername) => {
   );
   console.log(`Following similarity: ${followingSimilarityResult.similarity}`);
 
+  const channelSimilarityResult = calculateObjectArraySimilarity(
+    primaryChannelFollowingData, 
+    secondaryChannelFollowingData, 
+    "channelId"
+);
+
   const similarities = [
     nftSimilarityResult.similarity,
     tokenSimilarityResult.similarity,
     followingSimilarityResult.similarity,
+    channelSimilarityResult.similarity
   ];
 
   const similarityScore =
