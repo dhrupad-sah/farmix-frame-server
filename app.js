@@ -229,8 +229,8 @@ const calculateSimilarity = async (fid, secondaryUsername) => {
   ];
 
   const [
-    [primaryNftData, primaryTokenData, primaryFollowingData, primaryChannelFollowingDat],
-    [secondaryNftData, secondaryTokenData, secondaryFollowingDat, secondaryChannelFollowingData],
+    [primaryNftData, primaryTokenData, primaryFollowingData, primaryChannelFollowingData],
+    [secondaryNftData, secondaryTokenData, secondaryFollowingData, secondaryChannelFollowingData],
   ] = await Promise.all([
     Promise.all(primaryDataPromises),
     Promise.all(secondaryDataPromises),
