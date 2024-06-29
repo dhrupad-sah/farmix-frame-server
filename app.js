@@ -3,6 +3,7 @@ const app = express();
 const { client } = require("./utils/Covalent/covalent");
 const { config } = require("dotenv");
 const cors = require("cors");
+const { supabaseClient } = require("./utils/Supabase/supabase");
 config();
 
 app.use(
@@ -54,6 +55,35 @@ const getUserAddressFromFID = async (fid) => {
   }
   return null;
 };
+
+const getUsernameFromFID = async (fid) => {
+    const query = `query MyQuery {
+        Socials(
+            input: {filter: {dappName: {_eq: farcaster}, userId: {_eq: "${fid}"}}, blockchain: ethereum}
+            ) {
+                Social {
+                    profileName
+            }
+        }
+    }`;
+    const response = await fetch("https://api.airstack.xyz/gql", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: process.env.AIRSTACK_API_KEY,
+      },
+      body: JSON.stringify({ query }),
+    });
+  
+    const { data } = await response.json();
+    if (
+        data.Socials &&
+        data.Socials.Social.length > 0 
+    ) {
+      return data.Socials.Social[0].profileName;
+    }
+    return null;
+  };
 
 // Calculate similarity between two arrays of objects as a percentage and collect common elements.
 const calculateObjectArraySimilarity = (array1, array2, key) => {
@@ -192,6 +222,75 @@ const calculateArraySimilarity = (array1, array2) => {
   };
 };
 
+const updateLeaderboard = async (primaryUsername, secondaryUsername, similarityScore) => {
+    try {
+        const { data, error } = await supabaseClient
+            .from('Leaderboardv2')
+            .select('*')
+            .eq('username', primaryUsername)
+            .single();
+
+        if (error && error.code !== 'PGRST116') {
+            throw new Error(`Supabase query error: ${error.message}`);
+        }
+
+        let digital_twins = [];
+        let similarity_scores = [];
+
+        if (data) {
+            digital_twins = data.digital_twins;
+            similarity_scores = data.similarity_score.map(score => parseFloat(score));
+        }
+
+        // Add new entry or update existing one
+        const existingIndex = digital_twins.indexOf(secondaryUsername);
+        if (existingIndex !== -1) {
+            digital_twins.splice(existingIndex, 1);
+            similarity_scores.splice(existingIndex, 1);
+        }
+
+        digital_twins.push(secondaryUsername);
+        similarity_scores.push(similarityScore);
+
+        // Sort and keep only top 5
+        const combined = digital_twins.map((twin, index) => ({
+            twin,
+            score: similarity_scores[index]
+        }));
+
+        combined.sort((a, b) => b.score - a.score);
+        combined.splice(5); // Keep only top 5
+
+        const updatedDigitalTwins = combined.map(item => item.twin);
+        const updatedSimilarityScores = combined.map(item => item.score.toFixed(2));
+
+        if (!data) {
+            // Insert new row
+            const { error: insertError } = await supabaseClient
+                .from('Leaderboardv2')
+                .insert({
+                    username: primaryUsername,
+                    digital_twins: updatedDigitalTwins,
+                    similarity_score: updatedSimilarityScores
+                });
+            if (insertError) throw new Error(`Supabase insert error: ${insertError.message}`);
+        } else {
+            // Update existing row
+            const { error: updateError } = await supabaseClient
+                .from('Leaderboardv2')
+                .update({
+                    digital_twins: updatedDigitalTwins,
+                    similarity_score: updatedSimilarityScores
+                })
+                .eq('username', primaryUsername);
+            if (updateError) throw new Error(`Supabase update error: ${updateError.message}`);
+        }
+    } catch (error) {
+        console.error('Error in updateLeaderboard:', error);
+        throw error;
+    }
+};
+
 const calculateSimilarity = async (fid, secondaryUsername) => {
   if (similarityScores[fid] !== undefined) {
     similarityScores[fid] = null;
@@ -318,7 +417,11 @@ app.post("/calculateSimilarity", async (req, res) => {
 
     console.log(fid, secondaryUsername);
 
+    const primaryUsername = await getUsernameFromFID(fid);
+
     const response = await calculateSimilarity(fid, secondaryUsername);
+
+    await updateLeaderboard(primaryUsername, secondaryUsername, response);
 
     console.log(response);
     return res.status(200).json(response);
@@ -338,6 +441,8 @@ app.post("/getSimilarityScore", async (req, res) => {
     console.log(err);
   }
 });
+
+
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
